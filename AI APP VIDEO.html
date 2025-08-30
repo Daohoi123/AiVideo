@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web App AI - Video Generation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* bg-gray-900 */
+        }
+        
+        .loading-gif {
+            width: 200px;
+            height: 200px;
+            mix-blend-mode: screen;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; } /* bg-gray-800 */
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; } /* bg-gray-600 */
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; } /* bg-gray-500 */
+        
+        #prompt-input::placeholder { color: #9ca3af; } /* placeholder-gray-400 */
+
+        .drop-zone-active {
+            outline: 2px dashed #3b82f6; /* blue-500 */
+            outline-offset: -4px;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+        .custom-file-button {
+            background-color: #374151; /* bg-gray-700 */
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color: 0.2s;
+            font-size: 14px;
+        }
+        .custom-file-button:hover {
+            background-color: #4b5563; /* bg-gray-600 */
+        }
+        .radio-label {
+            background-color: #374151; /* bg-gray-700 */
+            color: #d1d5db; /* text-gray-300 */
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        input[type="radio"]:checked + .radio-label {
+            background-color: #2563eb; /* bg-blue-600 */
+            color: white;
+            font-weight: 600;
+        }
+        .tab-button {
+            background: none;
+            border: none;
+            color: #9ca3af; /* text-gray-400 */
+            padding: 8px 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: color 0.2s;
+        }
+        .tab-button.active {
+            font-weight: 700;
+            color: white;
+            border-bottom: 2px solid white;
+        }
+
+    </style>
+</head>
+<body class="text-white flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-6xl h-[85vh] bg-gray-800 rounded-2xl shadow-lg flex overflow-hidden">
+        
+        <!-- Left Panel: Controls -->
+        <div class="w-1/3 max-w-sm bg-gray-900 p-6 flex flex-col space-y-6 overflow-y-auto">
+            <!-- Tabs -->
+            <div class="flex space-x-6 border-b border-gray-700 pb-2">
+                <button id="btn-text-to-video" class="tab-button active">Text 2V</button>
+                <button id="btn-image-to-video" class="tab-button">Image 2V</button>
+                <button id="btn-effect" class="tab-button">Effect</button>
+            </div>
+
+            <!-- Controls Container -->
+            <div id="controls-container" class="flex flex-col space-y-6">
+                <!-- Text to Video Controls -->
+                <div id="text-to-video-controls" class="flex flex-col space-y-4">
+                    <div>
+                        <label for="video-aspect-ratio" class="block text-sm font-medium text-gray-400 mb-2">Khung hình</label>
+                        <select id="video-aspect-ratio" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500">
+                            <option value="1">1:1</option>
+                            <option value="2">9:16</option>
+                            <option value="3">16:9</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="video-duration" class="block text-sm font-medium text-gray-400 mb-2">Thời gian (giây)</label>
+                        <input type="number" id="video-duration" value="6" min="1" max="20" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                
+                <!-- Image to Video Controls -->
+                <div id="image-to-video-controls" class="hidden flex-col space-y-4">
+                     <div>
+                        <label class="block text-sm font-medium text-gray-400 mb-2">Số ảnh đầu vào</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="radio" name="image-video-mode" id="mode-start-image" value="start" class="hidden" checked>
+                            <label for="mode-start-image" class="radio-label">Start image</label>
+                            
+                            <input type="radio" name="image-video-mode" id="mode-start-end-image" value="start-end" class="hidden">
+                            <label for="mode-start-end-image" class="radio-label">Start & End</label>
+                        </div>
+                    </div>
+                    <div id="end-image-upload-container-i2v" class="hidden">
+                        <label class="block text-sm font-medium text-gray-400 mb-2">End Image</label>
+                        <div class="flex items-center space-x-2">
+                            <label for="end-image-input-i2v" id="end-image-label-i2v" class="custom-file-button">Chọn ảnh cuối</label>
+                            <input type="file" id="end-image-input-i2v" accept="image/*" class="hidden">
+                            <div id="end-image-preview-container-i2v" class="relative hidden">
+                                <img id="end-image-preview-i2v" class="h-12 w-12 object-cover rounded-md">
+                                <button id="remove-end-image-btn-i2v" class="absolute -top-1.5 -right-1.5 bg-red-600 rounded-full h-5 w-5 flex items-center justify-center text-white text-xs font-bold">&times;</button>
+                            </div>
+                        </div>
+                    </div>
+                     <div>
+                        <label for="resolution-itv" class="block text-sm font-medium text-gray-400 mb-2">Độ phân giải</label>
+                        <input type="number" id="resolution-itv" value="832" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500">
+                    </div>
+                     <div>
+                        <label for="duration-itv" class="block text-sm font-medium text-gray-400 mb-2">Thời gian (giây)</label>
+                        <input type="number" id="duration-itv" value="6" min="1" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <!-- Effect Controls -->
+                 <div id="effect-controls" class="hidden flex-col space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400 mb-2">End Image (Tùy chọn)</label>
+                        <div class="flex items-center space-x-2">
+                            <label for="end-image-input-effect" id="end-image-label-effect" class="custom-file-button">Chọn ảnh cuối</label>
+                            <input type="file" id="end-image-input-effect" accept="image/*" class="hidden">
+                            <div id="end-image-preview-container-effect" class="relative hidden">
+                                <img id="end-image-preview-effect" class="h-12 w-12 object-cover rounded-md">
+                                <button id="remove-end-image-btn-effect" class="absolute -top-1.5 -right-1.5 bg-red-600 rounded-full h-5 w-5 flex items-center justify-center text-white text-xs font-bold">&times;</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="effect-select" class="block text-sm font-medium text-gray-400 mb-2">Chọn hiệu ứng</label>
+                        <select id="effect-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500">
+                            <option value="1">Quay 360 độ</option>
+                            <option value="2">Biến hình</option>
+                            <option value="3">Hiệu ứng ma thuật</option>
+                            <option value="4">Biến thành cô dâu</option>
+                            <option value="5">Khoe cơ bắp</option>
+                            <option value="6">Đổ nước vào người</option>
+                            <option value="7">Kiss</option>
+                            <option value="8">Tan biến</option>
+                            <option value="9">Catwalk</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="duration-effect" class="block text-sm font-medium text-gray-400 mb-2">Thời gian (giây)</label>
+                        <input type="number" id="duration-effect" value="5" min="1" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Chat & Display -->
+        <div class="flex-1 flex flex-col bg-gray-800 p-6">
+            <!-- Display Area -->
+            <div id="display-area" class="flex-1 flex items-center justify-center bg-black bg-opacity-20 rounded-lg mb-4 relative overflow-hidden">
+                <img id="fallback-image" src="https://placehold.co/1024x1024/1f2937/4a5568?text=Hiển+thị+kết+quả" alt="Vùng hiển thị kết quả" class="max-w-full max-h-full object-contain">
+                <video id="result-video" class="hidden max-w-full max-h-full" controls autoplay loop muted playsinline></video>
+
+                <!-- Status Overlay -->
+                <div id="status-overlay" class="absolute inset-0 hidden z-30">
+                    <img id="loading-bg-image" src="" class="absolute inset-0 w-full h-full object-cover">
+                    <div id="loading-overlay-color" class="absolute inset-0"></div>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                        <img src="https://res.cloudinary.com/dzfuqyqoq/image/upload/v1755349021/loading_ok_kdesfk.gif" alt="Đang xử lý..." class="loading-gif">
+                        <p id="status-message" class="text-lg text-white font-bold mt-4"></p>
+                        <p id="error-message" class="text-red-400 mt-2 font-semibold"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prompt Input Area -->
+            <div id="prompt-container" class="bg-gray-700 rounded-xl p-2 flex items-center space-x-3">
+                <label for="file-input" class="cursor-pointer p-2 rounded-full hover:bg-gray-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                </label>
+                <input type="file" id="file-input" accept="image/*" class="hidden">
+                
+                <div id="image-preview-container" class="relative hidden">
+                    <img id="image-preview" class="h-12 w-12 object-cover rounded-md">
+                    <button id="remove-image-btn" class="absolute -top-1.5 -right-1.5 bg-red-600 rounded-full h-5 w-5 flex items-center justify-center text-white text-xs font-bold">&times;</button>
+                </div>
+
+                <input type="text" id="prompt-input" class="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none" placeholder="Nhập prompt của bạn...">
+                
+                <button id="send-btn" class="bg-blue-600 hover:bg-blue-700 rounded-lg p-3 transition duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="white" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM ELEMENTS ---
+        const fallbackImage = document.getElementById('fallback-image');
+        const resultVideo = document.getElementById('result-video');
+        const statusOverlay = document.getElementById('status-overlay');
+        const statusMessage = document.getElementById('status-message');
+        const errorMessage = document.getElementById('error-message');
+        const loadingBgImage = document.getElementById('loading-bg-image');
+        const loadingOverlayColor = document.getElementById('loading-overlay-color');
+        const promptContainer = document.getElementById('prompt-container');
+        const fileInput = document.getElementById('file-input');
+        const imagePreviewContainer = document.getElementById('image-preview-container');
+        const imagePreview = document.getElementById('image-preview');
+        const removeImageBtn = document.getElementById('remove-image-btn');
+        const promptInput = document.getElementById('prompt-input');
+        const sendBtn = document.getElementById('send-btn');
+        
+        // Tabs and Controls
+        const btnTextToVideo = document.getElementById('btn-text-to-video');
+        const btnImageToVideo = document.getElementById('btn-image-to-video');
+        const btnEffect = document.getElementById('btn-effect');
+        const textToVideoControls = document.getElementById('text-to-video-controls');
+        const imageToVideoControls = document.getElementById('image-to-video-controls');
+        const effectControls = document.getElementById('effect-controls');
+        const tabButtons = [btnTextToVideo, btnImageToVideo, btnEffect];
+        const controlPanels = [textToVideoControls, imageToVideoControls, effectControls];
+
+        // Text to Video
+        const videoAspectRatioSelect = document.getElementById('video-aspect-ratio');
+        const videoDurationInput = document.getElementById('video-duration');
+
+        // Image to Video
+        const imageVideoModeRadios = document.querySelectorAll('input[name="image-video-mode"]');
+        const endImageUploadContainerI2V = document.getElementById('end-image-upload-container-i2v');
+        const endImageInputI2V = document.getElementById('end-image-input-i2v');
+        const endImageLabelI2V = document.getElementById('end-image-label-i2v');
+        const endImagePreviewContainerI2V = document.getElementById('end-image-preview-container-i2v');
+        const endImagePreviewI2V = document.getElementById('end-image-preview-i2v');
+        const removeEndImageBtnI2V = document.getElementById('remove-end-image-btn-i2v');
+        const resolutionITV = document.getElementById('resolution-itv');
+        const durationITV = document.getElementById('duration-itv');
+
+        // Effect
+        const endImageInputEffect = document.getElementById('end-image-input-effect');
+        const endImageLabelEffect = document.getElementById('end-image-label-effect');
+        const endImagePreviewContainerEffect = document.getElementById('end-image-preview-container-effect');
+        const endImagePreviewEffect = document.getElementById('end-image-preview-effect');
+        const removeEndImageBtnEffect = document.getElementById('remove-end-image-btn-effect');
+        const effectSelect = document.getElementById('effect-select');
+        const durationEffect = document.getElementById('duration-effect');
+
+        // --- STATE MANAGEMENT ---
+        let currentWs = null; 
+        let uploadedImageFile = null;
+        let endImageFileI2V = null;
+        let endImageFileEffect = null;
+        let activeVideoMode = 'text-to-video';
+        
+        const CLOUDINARY_CLOUD_NAME = "dzfuqyqoq";
+        const CLOUDINARY_UPLOAD_PRESET = "daoquochoi";
+
+        // --- UI LOGIC ---
+        function switchVideoMode(mode) {
+            activeVideoMode = mode;
+            
+            tabButtons.forEach(btn => {
+                // FIX: The original comparison was incorrect due to a replace() call.
+                // Button IDs contain hyphens, so we compare with the mode directly.
+                btn.classList.toggle('active', btn.id === `btn-${mode}`);
+            });
+
+            controlPanels.forEach(panel => {
+                panel.style.display = panel.id.startsWith(mode) ? 'flex' : 'none';
+            });
+        }
+        
+        btnTextToVideo.addEventListener('click', () => switchVideoMode('text-to-video'));
+        btnImageToVideo.addEventListener('click', () => switchVideoMode('image-to-video'));
+        btnEffect.addEventListener('click', () => switchVideoMode('effect'));
+
+        imageVideoModeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const showEndImage = e.target.value === 'start-end';
+                endImageUploadContainerI2V.style.display = showEndImage ? 'block' : 'none';
+            });
+        });
+
+        // End Image Upload Logic for I2V
+        endImageInputI2V.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                endImageFileI2V = file;
+                endImagePreviewI2V.src = URL.createObjectURL(file);
+                endImagePreviewContainerI2V.classList.remove('hidden');
+                endImageLabelI2V.classList.add('hidden');
+            }
+        });
+        removeEndImageBtnI2V.addEventListener('click', () => {
+            URL.revokeObjectURL(endImagePreviewI2V.src);
+            endImageFileI2V = null;
+            endImageInputI2V.value = '';
+            endImagePreviewContainerI2V.classList.add('hidden');
+            endImageLabelI2V.classList.remove('hidden');
+        });
+
+        // End Image Upload Logic for Effect
+        endImageInputEffect.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                endImageFileEffect = file;
+                endImagePreviewEffect.src = URL.createObjectURL(file);
+                endImagePreviewContainerEffect.classList.remove('hidden');
+                endImageLabelEffect.classList.add('hidden');
+            }
+        });
+        removeEndImageBtnEffect.addEventListener('click', () => {
+            URL.revokeObjectURL(endImagePreviewEffect.src);
+            endImageFileEffect = null;
+            endImageInputEffect.value = '';
+            endImagePreviewContainerEffect.classList.add('hidden');
+            endImageLabelEffect.classList.remove('hidden');
+        });
+        
+        // --- MAIN IMAGE UPLOAD LOGIC (in chat) ---
+        function handleFileSelect(file) {
+            if (!file || !file.type.startsWith('image/')) return;
+            uploadedImageFile = file;
+            imagePreview.src = URL.createObjectURL(file);
+            imagePreviewContainer.style.display = 'block';
+        }
+        
+        fileInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0]));
+        promptContainer.addEventListener('dragover', (e) => { e.preventDefault(); promptContainer.classList.add('drop-zone-active'); });
+        promptContainer.addEventListener('dragleave', () => promptContainer.classList.remove('drop-zone-active'));
+        promptContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            promptContainer.classList.remove('drop-zone-active');
+            handleFileSelect(e.dataTransfer.files[0]);
+        });
+        window.addEventListener('paste', (e) => {
+            const items = e.clipboardData.items;
+            for (const item of items) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    handleFileSelect(item.getAsFile());
+                    break; 
+                }
+            }
+        });
+        removeImageBtn.addEventListener('click', () => {
+            URL.revokeObjectURL(imagePreview.src);
+            uploadedImageFile = null;
+            fileInput.value = '';
+            imagePreviewContainer.style.display = 'none';
+        });
+
+        // --- CORE API LOGIC ---
+        sendBtn.addEventListener('click', handleProcessingRequest);
+        promptInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleProcessingRequest(); } });
+        
+        function resetState() {
+            if (currentWs) currentWs.close();
+            currentWs = null;
+            errorMessage.textContent = '';
+            setUiLoading(false);
+        }
+        
+        function setUiLoading(isLoading, message = '') {
+            if (isLoading) {
+                statusMessage.textContent = message;
+                errorMessage.textContent = '';
+                
+                const hasInputImage = (activeVideoMode === 'image-to-video' || activeVideoMode === 'effect') && !!uploadedImageFile;
+
+                if (hasInputImage) {
+                    loadingBgImage.src = URL.createObjectURL(uploadedImageFile);
+                    loadingBgImage.style.display = 'block';
+                    loadingOverlayColor.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+                } else {
+                    loadingBgImage.style.display = 'none';
+                    loadingOverlayColor.style.backgroundColor = 'rgb(30, 30, 30)';
+                }
+                statusOverlay.style.display = 'flex';
+            } else {
+                statusOverlay.style.display = 'none';
+                if (loadingBgImage.src.startsWith('blob:')) {
+                    URL.revokeObjectURL(loadingBgImage.src);
+                    loadingBgImage.src = '';
+                }
+            }
+        }
+
+        async function uploadToCloudinary(imageFile) {
+            const formData = new FormData();
+            formData.append('file', imageFile);
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+            const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+            const response = await fetch(uploadUrl, { method: 'POST', body: formData });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(`Tải ảnh lên Cloudinary thất bại: ${errorData?.error?.message || response.status}`);
+            }
+            return (await response.json()).secure_url;
+        }
+        
+        async function handleProcessingRequest() {
+            resetState();
+            const promptText = promptInput.value.trim();
+            
+            setUiLoading(true, 'Đang chuẩn bị...');
+            try {
+                let webappId, nodeInfoList;
+                const apiKey = "d80bce5a3a1a467c8f9eb2f105b39aea";
+                
+                if (activeVideoMode === 'text-to-video') {
+                    if (!promptText) throw new Error('Vui lòng nhập prompt!');
+                    webappId = "1933704660299468802";
+                    nodeInfoList = [
+                        { nodeId: "200", fieldName: "value", fieldValue: videoAspectRatioSelect.value },
+                        { nodeId: "208", fieldName: "value", fieldValue: videoDurationInput.value },
+                        { nodeId: "215", fieldName: "text", fieldValue: promptText }
+                    ];
+                } else if (activeVideoMode === 'image-to-video') {
+                    const imageMode = document.querySelector('input[name="image-video-mode"]:checked').value;
+                    if (!uploadedImageFile) throw new Error('Vui lòng tải lên "Start image"!');
+                    setUiLoading(true, 'Đang tải ảnh lên...');
+                    const startImageUrl = await uploadToCloudinary(uploadedImageFile);
+                    webappId = "1957033462478639105";
+                    nodeInfoList = [
+                        { nodeId: "99", fieldName: "value", fieldValue: resolutionITV.value },
+                        { nodeId: "95", fieldName: "value", fieldValue: durationITV.value },
+                        { nodeId: "109", fieldName: "text", fieldValue: promptText },
+                        { nodeId: "94", fieldName: "image", fieldValue: startImageUrl }
+                    ];
+                    if (imageMode === 'start-end') {
+                        if (!endImageFileI2V) throw new Error('Vui lòng tải lên "End image"!');
+                        const endImageUrl = await uploadToCloudinary(endImageFileI2V);
+                        nodeInfoList.push(
+                            { nodeId: "101", fieldName: "value", fieldValue: "2" },
+                            { nodeId: "223", fieldName: "image", fieldValue: endImageUrl }
+                        );
+                    } else {
+                        nodeInfoList.push({ nodeId: "101", fieldName: "value", fieldValue: "1" });
+                    }
+                } else if (activeVideoMode === 'effect') {
+                    if (!uploadedImageFile) throw new Error('Vui lòng tải lên ảnh trong khung chat!');
+                    setUiLoading(true, 'Đang tải ảnh lên...');
+                    const startImageUrl = await uploadToCloudinary(uploadedImageFile);
+                    webappId = "1960985154690985985";
+                    nodeInfoList = [
+                        { nodeId: "102", fieldName: "image", fieldValue: startImageUrl },
+                        { nodeId: "38", fieldName: "value", fieldValue: durationEffect.value },
+                        { nodeId: "126", fieldName: "text", fieldValue: promptText },
+                        { nodeId: "88", fieldName: "value", fieldValue: effectSelect.value }
+                    ];
+                    if (endImageFileEffect) {
+                        const endImageUrl = await uploadToCloudinary(endImageFileEffect);
+                        nodeInfoList.push(
+                            { nodeId: "123", fieldName: "value", fieldValue: "2" },
+                            { nodeId: "2", fieldName: "image", fieldValue: endImageUrl }
+                        );
+                    } else {
+                        nodeInfoList.push({ nodeId: "123", fieldName: "value", fieldValue: "1" });
+                    }
+                }
+                
+                setUiLoading(true, 'Đang kết nối...');
+                const runPayload = { webappId, apiKey, nodeInfoList };
+                const runUrl = 'https://www.runninghub.ai/task/openapi/ai-app/run';
+                const runResponse = await fetch(runUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(runPayload) });
+                if (!runResponse.ok) throw new Error(`Lỗi khi chạy tác vụ: ${runResponse.statusText}`);
+                
+                const runResult = await runResponse.json();
+                if (runResult.code !== 0) {
+                    throw new Error(`API không khởi động được: ${runResult.msg || 'Lỗi không xác định'}`);
+                }
+                if (!runResult.data || !runResult.data.netWssUrl) {
+                    throw new Error('API đã báo thành công nhưng không trả về URL kết nối.');
+                }
+                
+                const wsUrl = runResult.data.netWssUrl;
+                currentWs = new WebSocket(wsUrl); 
+                currentWs.onopen = () => setUiLoading(true, 'Đang xử lý...');
+                currentWs.onmessage = (event) => handleWebSocketMessage(event.data);
+                currentWs.onerror = () => { throw new Error('Kết nối WebSocket gặp lỗi.'); };
+
+            } catch (error) {
+                console.error('Lỗi trong quy trình:', error);
+                errorMessage.textContent = error.message;
+                setUiLoading(false);
+            }
+        }
+        
+        function findMediaFilenameInObject(obj, extension) {
+            for (const key in obj) {
+                if (typeof obj[key] === 'object' && obj[key] !== null) {
+                    if (Array.isArray(obj[key])) {
+                        for (const item of obj[key]) {
+                            if (typeof item === 'object' && item !== null && typeof item.filename === 'string' && item.filename.endsWith(extension)) {
+                                return item.filename;
+                            }
+                        }
+                    }
+                    const result = findMediaFilenameInObject(obj[key], extension);
+                    if (result) return result;
+                }
+            }
+            return null;
+        }
+
+        function handleWebSocketMessage(message) {
+            try {
+                const data = JSON.parse(message);
+                if (data.type === 'executed') {
+                    const output = data.data.output;
+                    const urlParams = new URLSearchParams(currentWs.url.split('?')[1]);
+                    const authParam = urlParams.get('Rh-Comfy-Auth');
+                    const decodedAuth = JSON.parse(atob(decodeURIComponent(authParam)));
+                    const userId = decodedAuth.userId;
+                    if (!userId) throw new Error('Không tìm thấy userId để tạo link kết quả.');
+                    
+                    const videoFilename = findMediaFilenameInObject(output, '.mp4');
+                    if (videoFilename) {
+                        if (currentWs) currentWs.close();
+                        const finalVideoUrl = `https://rh-images.xiaoyaoyou.com/${userId}/output/${videoFilename}`;
+                        fallbackImage.style.display = 'none';
+                        resultVideo.src = finalVideoUrl;
+                        resultVideo.style.display = 'block';
+                        setUiLoading(false);
+                    }
+                } else if (data.type === 'progress') {
+                    const progress = Math.round(data.data.value / data.data.max * 100);
+                    setUiLoading(true, `Đang xử lý... ${progress}%`);
+                } else if (data.type === 'execution_error') {
+                     throw new Error('Server báo lỗi trong quá trình xử lý.');
+                }
+            } catch (error) {
+                console.error("Lỗi xử lý WebSocket:", error);
+                errorMessage.textContent = error.message;
+                setUiLoading(false);
+                if (currentWs) currentWs.close();
+            }
+        }
+
+        // --- INITIAL UI SETUP ---
+        switchVideoMode('text-to-video');
+    </script>
+</body>
+</html>
