@@ -191,6 +191,15 @@
                         <p id="status-message" class="text-lg text-white font-bold mt-4"></p>
                         <p id="error-message" class="text-red-400 mt-2 font-semibold"></p>
                     </div>
+                    <!-- Cancel Button -->
+                    <div class="absolute bottom-4 right-4 group">
+                        <button id="cancel-btn" class="bg-red-600 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-lg transform transition-all hover:scale-110 focus:outline-none opacity-0 group-hover:opacity-100" title="Hủy tác vụ">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                        <span class="absolute bottom-3 right-12 text-white text-sm font-semibold opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap pointer-events-none transform translate-x-4 group-hover:translate-x-0">
+                            Hủy
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -224,6 +233,7 @@
         const errorMessage = document.getElementById('error-message');
         const loadingBgImage = document.getElementById('loading-bg-image');
         const loadingOverlayColor = document.getElementById('loading-overlay-color');
+        const cancelBtn = document.getElementById('cancel-btn'); // New element
         const promptContainer = document.getElementById('prompt-container');
         const fileInput = document.getElementById('file-input');
         const imagePreviewContainer = document.getElementById('image-preview-container');
@@ -267,11 +277,15 @@
         const durationEffect = document.getElementById('duration-effect');
 
         // --- STATE MANAGEMENT ---
-        let currentWs = null; 
         let uploadedImageFile = null;
         let endImageFileI2V = null;
         let endImageFileEffect = null;
         let activeVideoMode = 'text-to-video';
+        
+        // New state for polling logic
+        let currentTaskId = null;
+        let statusInterval = null;
+        const API_KEY = "d80bce5a3a1a467c8f9eb2f105b39aea";
         
         const CLOUDINARY_CLOUD_NAME = "dzfuqyqoq";
         const CLOUDINARY_UPLOAD_PRESET = "daoquochoi";
@@ -281,9 +295,7 @@
             activeVideoMode = mode;
             
             tabButtons.forEach(btn => {
-                // FIX: The original comparison was incorrect due to a replace() call.
-                // Button IDs contain hyphens, so we compare with the mode directly.
-                btn.classList.toggle('active', btn.id === `btn-${mode}`);
+                btn.classList.toggle('active', btn.id === `btn-${mode.replace('_','-')}`);
             });
 
             controlPanels.forEach(panel => {
@@ -313,7 +325,7 @@
             }
         });
         removeEndImageBtnI2V.addEventListener('click', () => {
-            URL.revokeObjectURL(endImagePreviewI2V.src);
+            if (endImagePreviewI2V.src) URL.revokeObjectURL(endImagePreviewI2V.src);
             endImageFileI2V = null;
             endImageInputI2V.value = '';
             endImagePreviewContainerI2V.classList.add('hidden');
@@ -331,7 +343,7 @@
             }
         });
         removeEndImageBtnEffect.addEventListener('click', () => {
-            URL.revokeObjectURL(endImagePreviewEffect.src);
+            if(endImagePreviewEffect.src) URL.revokeObjectURL(endImagePreviewEffect.src);
             endImageFileEffect = null;
             endImageInputEffect.value = '';
             endImagePreviewContainerEffect.classList.add('hidden');
@@ -364,7 +376,7 @@
             }
         });
         removeImageBtn.addEventListener('click', () => {
-            URL.revokeObjectURL(imagePreview.src);
+            if (imagePreview.src) URL.revokeObjectURL(imagePreview.src);
             uploadedImageFile = null;
             fileInput.value = '';
             imagePreviewContainer.style.display = 'none';
@@ -373,10 +385,14 @@
         // --- CORE API LOGIC ---
         sendBtn.addEventListener('click', handleProcessingRequest);
         promptInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleProcessingRequest(); } });
-        
+        cancelBtn.addEventListener('click', cancelTask);
+
         function resetState() {
-            if (currentWs) currentWs.close();
-            currentWs = null;
+            if (statusInterval) {
+                clearInterval(statusInterval);
+                statusInterval = null;
+            }
+            currentTaskId = null;
             errorMessage.textContent = '';
             setUiLoading(false);
         }
@@ -426,7 +442,6 @@
             setUiLoading(true, 'Đang chuẩn bị...');
             try {
                 let webappId, nodeInfoList;
-                const apiKey = "d80bce5a3a1a467c8f9eb2f105b39aea";
                 
                 if (activeVideoMode === 'text-to-video') {
                     if (!promptText) throw new Error('Vui lòng nhập prompt!');
@@ -480,25 +495,20 @@
                     }
                 }
                 
-                setUiLoading(true, 'Đang kết nối...');
-                const runPayload = { webappId, apiKey, nodeInfoList };
+                setUiLoading(true, 'Đang khởi tạo tác vụ...');
+                const runPayload = { webappId, apiKey: API_KEY, nodeInfoList };
                 const runUrl = 'https://www.runninghub.ai/task/openapi/ai-app/run';
                 const runResponse = await fetch(runUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(runPayload) });
                 if (!runResponse.ok) throw new Error(`Lỗi khi chạy tác vụ: ${runResponse.statusText}`);
                 
                 const runResult = await runResponse.json();
-                if (runResult.code !== 0) {
-                    throw new Error(`API không khởi động được: ${runResult.msg || 'Lỗi không xác định'}`);
+                if (runResult.code !== 0 || !runResult.data.taskId) {
+                     throw new Error(`API không khởi động được tác vụ: ${runResult.msg || 'Không nhận được Task ID'}`);
                 }
-                if (!runResult.data || !runResult.data.netWssUrl) {
-                    throw new Error('API đã báo thành công nhưng không trả về URL kết nối.');
-                }
-                
-                const wsUrl = runResult.data.netWssUrl;
-                currentWs = new WebSocket(wsUrl); 
-                currentWs.onopen = () => setUiLoading(true, 'Đang xử lý...');
-                currentWs.onmessage = (event) => handleWebSocketMessage(event.data);
-                currentWs.onerror = () => { throw new Error('Kết nối WebSocket gặp lỗi.'); };
+                currentTaskId = runResult.data.taskId;
+
+                setUiLoading(true, 'Đang xử lý...');
+                statusInterval = setInterval(checkTaskStatus, 3000); // Poll every 3 seconds
 
             } catch (error) {
                 console.error('Lỗi trong quy trình:', error);
@@ -507,54 +517,125 @@
             }
         }
         
-        function findMediaFilenameInObject(obj, extension) {
-            for (const key in obj) {
-                if (typeof obj[key] === 'object' && obj[key] !== null) {
-                    if (Array.isArray(obj[key])) {
-                        for (const item of obj[key]) {
-                            if (typeof item === 'object' && item !== null && typeof item.filename === 'string' && item.filename.endsWith(extension)) {
-                                return item.filename;
-                            }
-                        }
-                    }
-                    const result = findMediaFilenameInObject(obj[key], extension);
-                    if (result) return result;
-                }
-            }
-            return null;
-        }
-
-        function handleWebSocketMessage(message) {
+        async function checkTaskStatus() {
+            if (!currentTaskId) { clearInterval(statusInterval); return; }
             try {
-                const data = JSON.parse(message);
-                if (data.type === 'executed') {
-                    const output = data.data.output;
-                    const urlParams = new URLSearchParams(currentWs.url.split('?')[1]);
-                    const authParam = urlParams.get('Rh-Comfy-Auth');
-                    const decodedAuth = JSON.parse(atob(decodeURIComponent(authParam)));
-                    const userId = decodedAuth.userId;
-                    if (!userId) throw new Error('Không tìm thấy userId để tạo link kết quả.');
-                    
-                    const videoFilename = findMediaFilenameInObject(output, '.mp4');
-                    if (videoFilename) {
-                        if (currentWs) currentWs.close();
-                        const finalVideoUrl = `https://rh-images.xiaoyaoyou.com/${userId}/output/${videoFilename}`;
-                        fallbackImage.style.display = 'none';
-                        resultVideo.src = finalVideoUrl;
-                        resultVideo.style.display = 'block';
-                        setUiLoading(false);
-                    }
-                } else if (data.type === 'progress') {
-                    const progress = Math.round(data.data.value / data.data.max * 100);
-                    setUiLoading(true, `Đang xử lý... ${progress}%`);
-                } else if (data.type === 'execution_error') {
-                     throw new Error('Server báo lỗi trong quá trình xử lý.');
+                const statusUrl = 'https://www.runninghub.ai/task/openapi/status';
+                const payload = { apiKey: API_KEY, taskId: currentTaskId };
+                const response = await fetch(statusUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`Lỗi kiểm tra trạng thái: ${response.statusText}`);
+                
+                const result = await response.json();
+                if (result.code !== 0) throw new Error(`Lỗi API trạng thái: ${result.msg}`);
+
+                let status, statusData;
+                if (typeof result.data === 'string') {
+                    status = result.data;
+                    statusData = {}; // Empty object to prevent errors
+                } else if (typeof result.data === 'object' && result.data !== null) {
+                    status = result.data.status;
+                    statusData = result.data;
+                } else {
+                     throw new Error('Định dạng phản hồi trạng thái không hợp lệ.');
+                }
+
+                switch (status) {
+                    case 'SUCCESS':
+                        clearInterval(statusInterval); statusInterval = null;
+                        fetchTaskOutput();
+                        break;
+                    case 'RUNNING':
+                    case 'PROCESSING':
+                        const progress = statusData.progress ? Math.round(statusData.progress * 100) : 0;
+                        setUiLoading(true, `Đang xử lý... ${progress > 0 ? progress + '%' : ''}`);
+                        break;
+                    case 'IN_QUEUE':
+                        setUiLoading(true, 'Đang xử lý...');
+                        break;
+                    case 'FAILED':
+                        clearInterval(statusInterval); 
+                        statusInterval = null;
+                        console.error('Lý do tác vụ thất bại từ server:', statusData.failReason || 'Không có lý do cụ thể.');
+                        throw new Error('Không Thành Công');
+                    default:
+                        setUiLoading(true, `Trạng thái: ${status || 'Không xác định'}`);
+                        break;
                 }
             } catch (error) {
-                console.error("Lỗi xử lý WebSocket:", error);
+                console.error('Lỗi khi kiểm tra trạng thái:', error);
                 errorMessage.textContent = error.message;
                 setUiLoading(false);
-                if (currentWs) currentWs.close();
+                if (statusInterval) clearInterval(statusInterval);
+            }
+        }
+
+        async function fetchTaskOutput() {
+            try {
+                setUiLoading(true, 'Đang lấy kết quả...');
+                const outputUrl = 'https://www.runninghub.ai/task/openapi/outputs';
+                const payload = { apiKey: API_KEY, taskId: currentTaskId };
+                const response = await fetch(outputUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`Lỗi lấy kết quả: ${response.statusText}`);
+                
+                const result = await response.json();
+                if (result.code !== 0) throw new Error(`API báo lỗi: ${result.msg || 'Lỗi không xác định'}`);
+                if (!result.data) throw new Error('API không trả về dữ liệu kết quả.');
+
+                const output = result.data.outputs || result.data;
+                if ((typeof output !== 'object' || output === null) && !Array.isArray(output)) {
+                    throw new Error('Định dạng dữ liệu kết quả không hợp lệ.');
+                }
+
+                let finalVideoUrl = null;
+                
+                // Function to recursively find a URL ending with .mp4 or other video formats
+                function findVideoUrl(obj) {
+                    for (const key in obj) {
+                        const value = obj[key];
+                        if (typeof value === 'string' && (value.endsWith('.mp4') || value.endsWith('.webm') || value.endsWith('.mov'))) {
+                            return value;
+                        }
+                        if (typeof value === 'object' && value !== null) {
+                            const found = findVideoUrl(value);
+                            if (found) return found;
+                        }
+                    }
+                    return null;
+                }
+
+                finalVideoUrl = findVideoUrl(output);
+                
+                if (finalVideoUrl) {
+                    fallbackImage.style.display = 'none';
+                    resultVideo.src = finalVideoUrl;
+                    resultVideo.style.display = 'block';
+                    resultVideo.play();
+                } else {
+                     throw new Error('Không tìm thấy video trong kết quả trả về.');
+                }
+            } catch (error) {
+                console.error('Lỗi khi lấy kết quả:', error);
+                errorMessage.textContent = error.message;
+            } finally {
+                setUiLoading(false);
+                currentTaskId = null;
+            }
+        }
+
+        async function cancelTask() {
+            if (!currentTaskId) return;
+            const taskIdToCancel = currentTaskId;
+            resetState(); // Reset UI immediately
+            try {
+                const cancelUrl = 'https://www.runninghub.ai/task/openapi/cancel';
+                const payload = { apiKey: API_KEY, taskId: taskIdToCancel };
+                const response = await fetch(cancelUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const result = await response.json();
+                if (result.code !== 0) {
+                    console.warn(`API báo lỗi khi hủy tác vụ: ${result.msg}`);
+                }
+            } catch (error) {
+                console.error('Lỗi khi hủy tác vụ:', error);
             }
         }
 
@@ -563,3 +644,4 @@
     </script>
 </body>
 </html>
+
