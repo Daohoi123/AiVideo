@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web App AI - Video Generation</title>
+    <link rel="icon" type="image/png" href="https://res.cloudinary.com/dzfuqyqoq/image/upload/v1758271750/logo_dia1pb.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -132,6 +133,19 @@
         .custom-file-button:hover {
             background-color: #334155; /* slate-700 */
         }
+        
+        /* Custom audio player */
+        audio::-webkit-media-controls-panel {
+            background-color: #f0f4f8;
+        }
+        audio::-webkit-media-controls-play-button,
+        audio::-webkit-media-controls-mute-button {
+            color: #1C2A3A;
+        }
+        audio::-webkit-media-controls-timeline,
+        audio::-webkit-media-controls-volume-slider {
+             background-color: #cbd5e1;
+        }
 
     </style>
 </head>
@@ -255,10 +269,13 @@
                                     <span>Tải lên Audio</span>
                                 </label>
                                 <input type="file" id="audio-input" accept="audio/*" class="hidden">
-                                <div id="audio-preview-container" class="relative hidden flex items-center gap-2 bg-slate-200 p-2 rounded-lg">
-                                    <span id="audio-filename" class="text-sm text-slate-700 truncate max-w-[100px]"></span>
+                            </div>
+                             <div id="audio-preview-container" class="relative hidden flex-col items-start gap-2 bg-slate-200 p-2 rounded-lg mt-2">
+                                <div class="w-full flex items-center justify-between">
+                                    <span id="audio-filename" class="text-sm text-slate-700 truncate max-w-[150px]"></span>
                                     <button id="remove-audio-btn" class="bg-red-600 rounded-full h-5 w-5 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">&times;</button>
                                 </div>
+                                <audio id="audio-player" controls class="w-full h-8 hidden"></audio>
                             </div>
                         </div>
                          <div>
@@ -375,6 +392,7 @@
         const audioPreviewContainer = document.getElementById('audio-preview-container');
         const audioFilename = document.getElementById('audio-filename');
         const removeAudioBtn = document.getElementById('remove-audio-btn');
+        const audioPlayer = document.getElementById('audio-player');
         const durationLipsynch = document.getElementById('duration-lipsynch');
 
         // --- STATE MANAGEMENT ---
@@ -460,13 +478,21 @@
             if (file) {
                 uploadedAudioFile = file;
                 audioFilename.textContent = file.name;
+                const audioURL = URL.createObjectURL(file);
+                audioPlayer.src = audioURL;
+                audioPlayer.classList.remove('hidden');
                 audioPreviewContainer.classList.remove('hidden');
             }
         });
         removeAudioBtn.addEventListener('click', () => {
+            if (audioPlayer.src) {
+                URL.revokeObjectURL(audioPlayer.src);
+            }
             uploadedAudioFile = null;
             audioInput.value = '';
             audioFilename.textContent = '';
+            audioPlayer.src = '';
+            audioPlayer.classList.add('hidden');
             audioPreviewContainer.classList.add('hidden');
         });
 
