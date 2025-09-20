@@ -319,8 +319,8 @@
                 </label>
                 <input type="file" id="file-input" accept="image/*" class="hidden">
                 
-                <div id="image-preview-container" class="relative hidden">
-                    <img id="image-preview" class="h-12 w-12 object-cover rounded-md">
+                <div id="image-preview-container" class="relative hidden h-12 w-12">
+                    <img id="image-preview" class="h-full w-full object-cover rounded-md">
                     <button id="remove-image-btn" class="absolute -top-1.5 -right-1.5 bg-red-600 rounded-full h-5 w-5 flex items-center justify-center text-white text-xs font-bold">&times;</button>
                 </div>
 
@@ -684,10 +684,19 @@
                 const statusUrl = 'https://www.runninghub.ai/task/openapi/status';
                 const payload = { apiKey: API_KEY, taskId: currentTaskId };
                 const response = await fetch(statusUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (!response.ok) throw new Error(`Lỗi kiểm tra trạng thái: ${response.statusText}`);
+                if (!response.ok) {
+                    // Stop polling on network-like errors
+                    clearInterval(statusInterval);
+                    statusInterval = null;
+                    throw new Error(`Lỗi kiểm tra trạng thái: ${response.statusText}`);
+                }
                 
                 const result = await response.json();
-                if (result.code !== 0) throw new Error(`Lỗi API trạng thái: ${result.msg}`);
+                if (result.code !== 0) {
+                     clearInterval(statusInterval);
+                     statusInterval = null;
+                     throw new Error(`Lỗi API trạng thái: ${result.msg}`);
+                }
 
                 let status, statusData;
                 if (typeof result.data === 'string') {
@@ -697,6 +706,8 @@
                     status = result.data.status;
                     statusData = result.data;
                 } else {
+                     clearInterval(statusInterval);
+                     statusInterval = null;
                      throw new Error('Định dạng phản hồi trạng thái không hợp lệ.');
                 }
 
@@ -717,7 +728,9 @@
                         clearInterval(statusInterval); 
                         statusInterval = null;
                         console.error('Lý do tác vụ thất bại từ server:', statusData.failReason || 'Không có lý do cụ thể.');
-                        throw new Error('Không Thành Công');
+                        errorMessage.textContent = 'Không Thành Công';
+                        setUiLoading(false);
+                        break; 
                     default:
                         setUiLoading(true, `Trạng thái: ${status || 'Không xác định'}`);
                         break;
@@ -804,5 +817,4 @@
     </script>
 </body>
 </html>
-
 
