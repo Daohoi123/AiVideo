@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-Video Generation</title>
+    <title>Web App AI - Video Generation</title>
     <link rel="icon" type="image/png" href="https://res.cloudinary.com/dzfuqyqoq/image/upload/v1758271750/logo_dia1pb.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -251,6 +251,7 @@
                                 <option value="7">Kiss</option>
                                 <option value="8">Tan biến</option>
                                 <option value="9">Catwalk</option>
+                                <option value="10">Cô gái xung quanh</option>
                             </select>
                         </div>
                         <div>
@@ -319,7 +320,7 @@
                 </label>
                 <input type="file" id="file-input" accept="image/*" class="hidden">
                 
-                <div id="image-preview-container" class="relative hidden h-12 w-12">
+                <div id="image-preview-container" class="relative hidden h-12 w-12 flex-shrink-0">
                     <img id="image-preview" class="h-full w-full object-cover rounded-md">
                     <button id="remove-image-btn" class="absolute -top-1.5 -right-1.5 bg-red-600 rounded-full h-5 w-5 flex items-center justify-center text-white text-xs font-bold">&times;</button>
                 </div>
@@ -621,21 +622,31 @@
                     if (!uploadedImageFile) throw new Error('Vui lòng tải lên ảnh trong khung chat!');
                     setUiLoading(true, 'Đang tải ảnh lên...');
                     const startImageUrl = await uploadToCloudinary(uploadedImageFile);
-                    webappId = "1960985154690985985";
-                    nodeInfoList = [
-                        { nodeId: "102", fieldName: "image", fieldValue: startImageUrl },
-                        { nodeId: "38", fieldName: "value", fieldValue: durationEffect.value },
-                        { nodeId: "126", fieldName: "text", fieldValue: promptText },
-                        { nodeId: "88", fieldName: "value", fieldValue: effectSelect.value }
-                    ];
-                    if (endImageFileEffect) {
-                        const endImageUrl = await uploadToCloudinary(endImageFileEffect);
-                        nodeInfoList.push(
-                            { nodeId: "123", fieldName: "value", fieldValue: "2" },
-                            { nodeId: "2", fieldName: "image", fieldValue: endImageUrl }
-                        );
-                    } else {
-                        nodeInfoList.push({ nodeId: "123", fieldName: "value", fieldValue: "1" });
+                    
+                    const selectedEffect = effectSelect.value;
+
+                    if (selectedEffect === '10') { // New effect "Cô gái xung quanh"
+                        webappId = "1956388140300861442";
+                        nodeInfoList = [
+                            { nodeId: "67", fieldName: "image", fieldValue: startImageUrl }
+                        ];
+                    } else { // Existing effects
+                        webappId = "1960985154690985985";
+                        nodeInfoList = [
+                            { nodeId: "102", fieldName: "image", fieldValue: startImageUrl },
+                            { nodeId: "38", fieldName: "value", fieldValue: durationEffect.value },
+                            { nodeId: "126", fieldName: "text", fieldValue: promptText },
+                            { nodeId: "88", fieldName: "value", fieldValue: selectedEffect }
+                        ];
+                        if (endImageFileEffect) {
+                            const endImageUrl = await uploadToCloudinary(endImageFileEffect);
+                            nodeInfoList.push(
+                                { nodeId: "123", fieldName: "value", fieldValue: "2" },
+                                { nodeId: "2", fieldName: "image", fieldValue: endImageUrl }
+                            );
+                        } else {
+                            nodeInfoList.push({ nodeId: "123", fieldName: "value", fieldValue: "1" });
+                        }
                     }
                 } else if (activeVideoMode === 'lip-synch') {
                     if (!uploadedImageFile) throw new Error('Vui lòng tải lên hình ảnh!');
@@ -782,7 +793,12 @@
                     fallbackImage.style.display = 'none';
                     resultVideo.src = finalVideoUrl;
                     resultVideo.style.display = 'block';
-                    resultVideo.play();
+                    try {
+                        await resultVideo.play();
+                    } catch (err) {
+                        console.warn("Autoplay was prevented:", err);
+                        // Video is loaded with controls, user can play manually.
+                    }
                 } else {
                      throw new Error('Không tìm thấy video trong kết quả trả về.');
                 }
@@ -817,4 +833,63 @@
     </script>
 </body>
 </html>
+```
+
+### Giải thích các thay đổi:
+
+Để giúp bạn có thể tự thực hiện trong tương lai, tôi đã thực hiện hai thay đổi chính:
+
+**1. Thêm hiệu ứng "Cô gái xung quanh" (HTML & JavaScript)**
+
+* **HTML (Giao diện):**
+    Tôi đã thêm một lựa chọn mới vào danh sách hiệu ứng. Mã `value="10"` là để chúng ta có thể nhận biết khi nào người dùng chọn hiệu ứng này.
+
+    ```html
+    <!-- ... -->
+    <select id="effect-select" class="control-select">
+        <option value="1">Quay 360 độ</option>
+        <option value="2">Biến hình</option>
+        <option value="3">Hiệu ứng ma thuật</option>
+        <option value="4">Biến thành cô dâu</option>
+        <option value="5">Khoe cơ bắp</option>
+        <option value="6">Đổ nước vào người</option>
+        <option value="7">Kiss</option>
+        <option value="8">Tan biến</option>
+        <option value="9">Catwalk</option>
+        <option value="10">Cô gái xung quanh</option>
+    </select>
+    <!-- ... -->
+    ```
+
+* **JavaScript (Logic):**
+    Trong hàm `handleProcessingRequest`, tôi đã thêm một câu lệnh `if` để kiểm tra xem hiệu ứng được chọn có phải là "Cô gái xung quanh" (`selectedEffect === '10'`) hay không.
+    * Nếu đúng, nó sẽ sử dụng `webappId` và `nodeInfoList` riêng cho hiệu ứng này.
+    * Nếu không, nó sẽ chạy logic cũ cho các hiệu ứng còn lại.
+
+    ```javascript
+    // ...
+    } else if (activeVideoMode === 'effect') {
+        if (!uploadedImageFile) throw new Error('Vui lòng tải lên ảnh trong khung chat!');
+        setUiLoading(true, 'Đang tải ảnh lên...');
+        const startImageUrl = await uploadToCloudinary(uploadedImageFile);
+        
+        const selectedEffect = effectSelect.value;
+
+        if (selectedEffect === '10') { // Logic cho hiệu ứng mới
+            webappId = "1956388140300861442";
+            nodeInfoList = [
+                { nodeId: "67", fieldName: "image", fieldValue: startImageUrl }
+            ];
+        } else { // Logic cho các hiệu ứng cũ
+            webappId = "1960985154690985985";
+            nodeInfoList = [
+                { nodeId: "102", fieldName: "image", fieldValue: startImageUrl },
+                { nodeId: "38", fieldName: "value", fieldValue: durationEffect.value },
+                { nodeId: "126", fieldName: "text", fieldValue: promptText },
+                { nodeId: "88", fieldName: "value", fieldValue: selectedEffect }
+            ];
+            // ... (phần code xử lý ảnh cuối giữ nguyên)
+        }
+    // ...
+    
 
